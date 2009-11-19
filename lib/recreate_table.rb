@@ -3,8 +3,8 @@
 ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
 
   def recreate_table(table, options={})
-    old_table = "#{table}_old"
-    as = options[:as] || "SELECT * FROM #{old_table}"
+    new_table = "#{table}_new"
+    as = options[:as] || "SELECT * FROM #{table}"
 
     model = table.to_s.titleize.singularize.constantize
     columns = model.columns.dup
@@ -12,26 +12,27 @@ ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
 
     transaction do
 
-      rename_table table, old_table
-
-      execute "CREATE TABLE #{table} AS (#{as})"
+      execute "CREATE TABLE #{new_table} AS (#{as}) WITH NO DATA"
 
       columns.each do |column|
         if column.primary
-          execute "ALTER TABLE #{table} ADD PRIMARY KEY (#{column.name})"
-          execute "ALTER TABLE #{table} ALTER COLUMN #{column.name} SET DEFAULT nextval('#{id_sequence}'::regclass)"
-          execute "ALTER SEQUENCE #{id_sequence} OWNED BY #{table}.id"
+          execute "ALTER TABLE #{new_table} ADD PRIMARY KEY (#{column.name})"
+          execute "ALTER TABLE #{new_table} ALTER COLUMN #{column.name} SET DEFAULT nextval('#{id_sequence}'::regclass)"
+          execute "ALTER SEQUENCE #{id_sequence} OWNED BY #{new_table}.id"
         else
-          change_column table, column.name, column.type, { :null => column.null , :default => column.default }
+          change_column new_table, column.name, column.type, { :null => column.null , :default => column.default }
         end
       end
       
-      indexes(old_table).each do |index|
+      execute "INSERT INTO #{new_table} (#{as})"
+
+      indexes(table).each do |index|
         execute "DROP INDEX #{index.name}"
-        add_index table, index.columns, :name => index.name, :unique => index.unique
+        add_index new_table, index.columns, :name => index.name, :unique => index.unique
       end
 
-      drop_table old_table
+      drop_table table
+      rename_table new_table, table
     end
   end
 end

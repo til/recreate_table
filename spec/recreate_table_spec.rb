@@ -16,7 +16,8 @@ describe "recreate_table" do
       t.integer :bar
       t.integer :baz, :null => false, :default => 0
     end
-    
+    Foo.reset_column_information
+
     Foo.create!(:bar => 123)
   end
 
@@ -86,7 +87,7 @@ describe "recreate_table with new columns" do
   end
 
   it "should allow to add new columns" do
-    Foo.connection.recreate_table :foos, :as => "SELECT *, 123 AS baz FROM foos_old"
+    Foo.connection.recreate_table :foos, :as => "SELECT *, 123 AS baz FROM foos"
     Foo.reset_column_information
     
     Foo.first.baz.should == 123
