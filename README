@@ -76,6 +76,13 @@ other databases as well. If yes, you could try to adapt it to
 e.g. mysql, but it would require some effort to change.
 
 
+Install
+=======
+
+cd myproject
+script/plugin install git://github.com/til/recreate_table.git
+
+
 License
 =======
 
