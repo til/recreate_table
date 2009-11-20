@@ -1,13 +1,81 @@
 RecreateTable
 =============
 
-Introduction goes here.
+Have you ever wanted to add a column to a very large table and prefill
+its values with some computed value, and then realized that running
+the migration would take your production system offline for a couple
+of hours?
+
+Applying schema changes and bulk updates to very large tables is often
+done most efficiently by creating a new table with the desired
+structure, copying the data into it and recreate the indices
+afterwards.
+
+This plugin adds a new schema command recreate_table that can be used
+in ActiveRecord migrations instead of manually writing "CREATE
+new_table AS SELECT ..." and then manually recreating all constraints
+and indices.
+
+It only works with postgresql right now.
 
 
 Example
 =======
 
-Example goes here.
+Imagine you have a table customers which contains many million rows,
+and you want to add a rating column prefilled with the average from
+the ratings table.
+
+The traditional approach would look like this:
+
+  class AddRatingToCustomers < ActiveRecord::Migration
+  
+    def self.up
+      add_column :customers, :rating, :integer
+      Customer.update_all(<<-EOSQL)
+        rating=(SELECT AVG(rating) FROM ratings 
+                 WHERE customer_id=customers.id)
+      EOSQL
+    end
+    ...
+  end
 
 
-Copyright (c) 2009 [name of plugin creator], released under the MIT license
+Using recreate_table you can migrate like this instead:
+
+  class AddRatingToCustomers < ActiveRecord::Migration
+  
+    def self.up
+      recreate_table(:customers, :as => <<-EOSQL)
+        SELECT *, (SELECT AVG(rating) FROM ratings 
+                    WHERE customer_id=customers.id) AS rating
+          FROM customers
+      EOSQL
+    end
+    ...
+  end
+
+
+Notes
+=====
+
+The sql query given with the :as option is used to construct a
+statement "CREATE new_table AS (...)".
+
+It relies on many assumptions and may or may not work for you.
+
+You can omit the :as option and simply use recreate_table to recreate
+a table and all its indexes.
+
+Updates to the original table after the recreate_table command started
+to run will be lost. If that matters, make sure that there are now
+updates e.g. by taking your app offline.
+
+I am not sure whether the efficiency issue with bulk updates exists on
+other databases as well. If yes, you could try to adapt it to
+e.g. mysql, but it would require some effort to change.
+
+
+
+
+Copyright (c) 2009 Tilmann Singer, released under the MIT license
