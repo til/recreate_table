@@ -105,6 +105,7 @@ describe "recreate_table with indices" do
     end
     Foo.connection.add_index :foos, :bar
     Foo.connection.add_index :foos, :baz, :unique => true
+    Foo.connection.execute "CREATE INDEX index_foos_on_baz_rounded ON foos (round(baz))"
   end
 
   it "should recreate the indices" do
@@ -121,5 +122,14 @@ describe "recreate_table with indices" do
     
     index = Foo.connection.indexes(:foos).find { |i| i.name == 'index_foos_on_baz' }
     index.unique.should be_true
+  end
+  
+  it "should retain special indexes" do
+    Foo.connection.recreate_table :foos
+    Foo.reset_column_information
+    
+    index_definition = Foo.connection.select_value("SELECT indexdef FROM pg_indexes WHERE indexname='index_foos_on_baz_rounded'")
+    
+    index_definition.should == "CREATE INDEX index_foos_on_baz_rounded ON foos USING btree (round((baz)::double precision))"
   end
 end

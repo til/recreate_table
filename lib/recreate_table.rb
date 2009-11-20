@@ -26,13 +26,13 @@ ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
       
       execute "INSERT INTO #{new_table} (#{as})"
 
-      indexes(table).each do |index|
-        execute "DROP INDEX #{index.name}"
-        add_index new_table, index.columns, :name => index.name, :unique => index.unique
-      end
+      index_definitions = select_values("SELECT indexdef FROM pg_indexes WHERE tablename='#{table}'")
 
       drop_table table
+
       rename_table new_table, table
+
+      index_definitions.each { |index_definition| execute index_definition }
     end
   end
 end
