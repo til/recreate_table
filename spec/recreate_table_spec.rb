@@ -133,3 +133,24 @@ describe "recreate_table with indices" do
     index_definition.should == "CREATE INDEX index_foos_on_baz_rounded ON foos USING btree (round((baz)::double precision))"
   end
 end
+
+
+describe "recreate_table with a table name that contains underscores" do
+
+  class FooBar < ActiveRecord::Base; end
+  
+  before(:each) do
+    FooBar.connection.create_table(:foo_bars) do |t|
+    end
+  end
+
+  it "should not fail" do
+    lambda {
+      FooBar.connection.recreate_table :foo_bars
+    }.should_not raise_error
+  end
+
+  it "should constantize table name" do
+    RecreateTable.model(:foo_bars).should == FooBar
+  end
+end

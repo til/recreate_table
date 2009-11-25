@@ -6,8 +6,7 @@ ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
     new_table = "#{table}_new"
     as = options[:as] || "SELECT * FROM #{table}"
 
-    model = table.to_s.titleize.singularize.constantize
-    columns = model.columns.dup
+    columns = RecreateTable::model(table).columns.dup
     id_sequence = "#{table}_id_seq"
 
     transaction do
@@ -37,3 +36,10 @@ ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
   end
 end
 
+
+module RecreateTable
+  
+  def self.model(table)
+    table.to_s.singularize.camelize.constantize
+  end
+end
