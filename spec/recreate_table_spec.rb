@@ -83,6 +83,7 @@ describe "recreate_table with new columns" do
     Foo.connection.create_table(:foos) do |t|
       t.integer :bar
     end
+    Foo.reset_column_information
     Foo.create!
   end
 
@@ -133,6 +134,26 @@ describe "recreate_table with indices" do
     index_definition.should == "CREATE INDEX index_foos_on_baz_rounded ON foos USING btree (round((baz)::double precision))"
   end
   
+  it "should keep of name primary key index" do
+    Foo.connection.recreate_table :foos
+    
+    primary_key_index = Foo.connection.select_value(<<-SQL)
+      SELECT c.relname FROM pg_index i
+      JOIN pg_class t ON i.indrelid=t.oid
+      JOIN pg_class c ON i.indexrelid=c.oid
+      WHERE i.indisprimary AND t.relname='foos'
+    SQL
+    primary_key_index.should == 'foos_pkey'
+  end
+
+  it "should remove old primary key index" do
+    Foo.connection.recreate_table :foos
+
+    Foo.connection.
+      select_value("SELECT COUNT(*) FROM pg_indexes WHERE indexname LIKE '%foos%_pkey'").
+      to_i.should == 1
+  end
+
   it "should create indices on new table to minimize downtime" do
     # Works, but don't know how to spec this easily
   end

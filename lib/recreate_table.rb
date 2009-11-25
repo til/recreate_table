@@ -26,7 +26,8 @@ ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
       execute "INSERT INTO #{new_table} (#{as})"
 
 
-      index_definitions = select_values("SELECT indexdef FROM pg_indexes WHERE tablename='#{table}'")
+      index_definitions = select_values("SELECT indexdef FROM pg_indexes 
+        WHERE tablename='#{table}' AND NOT indexname LIKE '%_pkey'")
       index_names = select_values("SELECT indexname FROM pg_indexes WHERE tablename='#{table}'")
 
       # Rename old indices to make way for similarly named indices on
@@ -46,6 +47,8 @@ ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
       drop_table table
 
       rename_table new_table, table
+
+      execute "ALTER INDEX #{table}_new_pkey RENAME TO #{table}_pkey"
     end
   end
 end
