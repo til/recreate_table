@@ -132,6 +132,10 @@ describe "recreate_table with indices" do
     
     index_definition.should == "CREATE INDEX index_foos_on_baz_rounded ON foos USING btree (round((baz)::double precision))"
   end
+  
+  it "should create indices on new table to minimize downtime" do
+    # Works, but don't know how to spec this easily
+  end
 end
 
 
@@ -151,6 +155,18 @@ describe "recreate_table with a table name that contains underscores" do
   end
 
   it "should constantize table name" do
-    RecreateTable.model(:foo_bars).should == FooBar
+    RecreateTable::model(:foo_bars).should == FooBar
+  end
+end
+
+
+describe "RecreateTable::replace_table_in_index_definition" do
+  
+  it "should replace original table with new table" do
+    RecreateTable::replace_table_in_index_definition(
+      "CREATE INDEX foos_user_id ON foos USING btree (user_id)",
+      "foos",
+      "foos_new"
+    ).should == "CREATE INDEX foos_user_id ON foos_new USING btree (user_id)"
   end
 end
