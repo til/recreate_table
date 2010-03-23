@@ -1,66 +1,71 @@
-# RecreateTable
-
-ActiveRecord::ConnectionAdapters::SchemaStatements.module_eval do
-
-  def recreate_table(table, options={})
+class RecreateTable
+  
+  def self.prepare(table, options={})
     new_table = "#{table}_new"
     as = options[:as] || "SELECT * FROM #{table}"
 
-    columns = RecreateTable::model(table).columns.dup
-    id_sequence = "#{table}_id_seq"
+    connection.transaction do
+      connection.execute "CREATE TABLE #{new_table} AS (#{as}) WITH NO DATA"
 
-    transaction do
-
-      execute "CREATE TABLE #{new_table} AS (#{as}) WITH NO DATA"
+      columns = model(table).columns.dup
 
       columns.each do |column|
         if column.primary
-          execute "ALTER TABLE #{new_table} ADD PRIMARY KEY (#{column.name})"
-          execute "ALTER TABLE #{new_table} ALTER COLUMN #{column.name} SET DEFAULT nextval('#{id_sequence}'::regclass)"
-          execute "ALTER SEQUENCE #{id_sequence} OWNED BY #{new_table}.id"
+          connection.execute "ALTER TABLE #{new_table} ADD PRIMARY KEY (#{column.name})"
         else
-          change_column new_table, column.name, column.type, { :null => column.null , :default => column.default }
+          connection.change_column new_table, column.name, column.type, { :null => column.null , :default => column.default }
         end
       end
+
+      connection.execute "INSERT INTO #{new_table} (#{as})"
       
-      execute "INSERT INTO #{new_table} (#{as})"
+      # Simply assume a rails-style id column and sequence
+      connection.execute <<-SQL
+        CREATE SEQUENCE #{new_table}_id_seq;
+        SELECT setval('#{new_table}_id_seq', nextval('#{table}_id_seq'));
+        ALTER TABLE #{new_table} ALTER COLUMN id SET DEFAULT nextval('#{new_table}_id_seq');
+        ALTER SEQUENCE #{new_table}_id_seq OWNED BY #{new_table}.id;
+      SQL
 
-
-      index_definitions = select_values("SELECT indexdef FROM pg_indexes 
-        WHERE tablename='#{table}' AND NOT indexname LIKE '%_pkey'")
-      index_names = select_values("SELECT indexname FROM pg_indexes WHERE tablename='#{table}'")
-
-      # Rename old indices to make way for similarly named indices on
-      # new table
-      index_names.each do |index_name|
-        execute("ALTER INDEX #{index_name} RENAME TO #{index_name}_old")
+      index_definitions = connection.select_values(<<-SQL)
+        SELECT indexdef FROM pg_indexes 
+        WHERE tablename='#{table}' AND NOT indexname LIKE '%_pkey'
+      SQL
+      index_definitions.each do |index_definition|
+        connection.execute(index_definition.gsub(table.to_s, new_table.to_s))
       end
+    end    
+  end
 
-      # Create indices on new table
-      index_definitions.each do |index_definition| 
-        execute(RecreateTable::replace_table_in_index_definition(
-            index_definition,
-            table,
-            new_table))
-      end
-
-      drop_table table
-
-      rename_table new_table, table
-
-      execute "ALTER INDEX #{table}_new_pkey RENAME TO #{table}_pkey"
+  def self.activate(table)
+    connection.transaction do
+      rename_table(table, "#{table}_old")
+      rename_table("#{table}_new", table)
     end
   end
-end
 
+  def self.cleanup(table)
+    connection.drop_table("#{table}_old")
+  end
 
-module RecreateTable
-  
+  def self.rename_table(old_name, new_name)
+    connection.rename_table old_name, new_name
+    
+    connection.execute("ALTER SEQUENCE #{old_name}_id_seq RENAME TO #{new_name}_id_seq")
+
+    connection.select_values(
+      "SELECT indexname FROM pg_indexes WHERE tablename='#{new_name}'"
+    ).each do |index_name|
+      connection.execute(
+        "ALTER INDEX #{index_name} RENAME TO #{index_name.gsub(old_name.to_s, new_name.to_s)}")
+    end
+  end
+
+  def self.connection
+    ActiveRecord::Base.connection
+  end
+
   def self.model(table)
     table.to_s.singularize.camelize.constantize
-  end
-  
-  def self.replace_table_in_index_definition(index_definition, table, new_table)
-    index_definition.gsub(/ON #{table}/, "ON #{new_table}")
   end
 end

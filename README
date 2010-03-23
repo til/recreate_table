@@ -1,20 +1,12 @@
 RecreateTable
 =============
 
-Have you ever wanted to add a column to a very large table and prefill
-its values with some computed value, and then realized that running
-the migration would take your production system offline for a couple
-of hours?
-
 Applying schema changes and bulk updates to very large tables is often
 done most efficiently by creating a new table with the desired
 structure, copying the data into it and recreate the indices
 afterwards.
 
-This plugin adds a new schema command recreate_table that can be used
-in ActiveRecord migrations instead of manually writing "CREATE
-new_table AS SELECT ..." and then manually recreating all constraints
-and indices.
+RecreateTable offers commands to copy a table and rename it.
 
 It only works with postgresql right now.
 
@@ -41,19 +33,21 @@ The traditional approach would look like this:
   end
 
 
-Using recreate_table you can migrate like this instead:
+Using recreate_table you can migrate manually like this instead:
 
-  class AddRatingToCustomers < ActiveRecord::Migration
-  
-    def self.up
-      recreate_table(:customers, :as => <<-EOSQL)
+
+RecreateTable.prepare(:customers, :as => <<-EOSQL)
         SELECT *, (SELECT AVG(rating) FROM ratings 
                     WHERE customer_id=customers.id) AS rating
           FROM customers
       EOSQL
-    end
-    ...
-  end
+
+
+RecreateTable.activate
+
+
+RecreateTable.cleanup
+
 
 
 Notes
@@ -68,7 +62,7 @@ You can omit the :as option and simply use recreate_table to recreate
 a table and all its indexes.
 
 Updates to the original table after the recreate_table command started
-to run will be lost. If that matters, make sure that there are now
+to run will be lost. If that matters, make sure that there are no
 updates e.g. by taking your app offline.
 
 I am not sure whether the efficiency issue with bulk updates exists on
